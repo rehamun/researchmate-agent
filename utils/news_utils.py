@@ -2,11 +2,10 @@ import requests
 import pandas as pd
 import os
 
-NEWS_API_KEY = os.getenv("NEWS_API_KEY")
 
 
 def fetch_latest_news(topic, max_articles=10):
-
+    api_key = os.getenv("NEWS_API_KEY")
     url = "https://newsapi.org/v2/everything"
 
     params = {
@@ -14,7 +13,7 @@ def fetch_latest_news(topic, max_articles=10):
         "pageSize": max_articles,
         "sortBy": "publishedAt",
         "language": "en",
-        "apiKey": NEWS_API_KEY
+        "apiKey": api_key
     }
 
     response = requests.get(url, params=params)
