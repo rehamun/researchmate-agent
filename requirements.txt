@@ -3,3 +3,6 @@ openai
 pypdf
 pandas
 numpy
+newspaper3k
+newsapi-python
+textblob

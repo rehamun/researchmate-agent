@@ -2,19 +2,16 @@ import os
 import streamlit as st
 import pandas as pd
 
-from utils.pdf_utils import extract_text_from_pdf, chunk_pages
+from utils.news_utils import fetch_latest_news
+from utils.pdf_utils import chunk_pages
 from utils.rag_utils import build_chunk_index
 from utils.agent_utils import (
-    analyze_single_paper,
-    make_comparison_dataframe,
-    generate_literature_review,
-    generate_research_gaps,
+    analyze_news_sentiment,
     answer_question_with_sources
 )
 
-st.set_page_config(page_title="ResearchMate Agent", layout="wide")
+st.set_page_config(page_title="NewsMate Agent", layout="wide")
 
-# Load secrets from Streamlit Cloud if available
 try:
     if "OPENAI_API_KEY" in st.secrets:
         os.environ["OPENAI_API_KEY"] = st.secrets["OPENAI_API_KEY"]
@@ -25,11 +22,12 @@ try:
 except Exception:
     pass
 
-if "analyses" not in st.session_state:
-    st.session_state.analyses = []
 
-if "comparison_df" not in st.session_state:
-    st.session_state.comparison_df = pd.DataFrame()
+if "news_df" not in st.session_state:
+    st.session_state.news_df = pd.DataFrame()
+
+if "sentiment_df" not in st.session_state:
+    st.session_state.sentiment_df = pd.DataFrame()
 
 if "indexed_chunks" not in st.session_state:
     st.session_state.indexed_chunks = []
@@ -37,27 +35,12 @@ if "indexed_chunks" not in st.session_state:
 if "processed" not in st.session_state:
     st.session_state.processed = False
 
-if "literature_review_text" not in st.session_state:
-    st.session_state.literature_review_text = ""
 
-if "research_gaps_text" not in st.session_state:
-    st.session_state.research_gaps_text = ""
+st.sidebar.title("News Topic Setup")
 
-st.sidebar.title("Research Setup")
-
-research_topic = st.sidebar.text_area(
-    "Research Topic",
-    placeholder="Example: Artificial intelligence in higher education"
-)
-
-keywords = st.sidebar.text_input(
-    "Keywords",
-    placeholder="Example: AI, higher education, adaptive learning"
-)
-
-review_style = st.sidebar.selectbox(
-    "Literature Review Style",
-    ["thematic", "chronological", "methodological"]
+topic = st.sidebar.text_input(
+    "Enter Topic",
+    placeholder="Example: Artificial Intelligence"
 )
 
 top_k_chunks = st.sidebar.slider(
@@ -67,152 +50,110 @@ top_k_chunks = st.sidebar.slider(
     value=6
 )
 
-st.title("ResearchMate Agent")
-st.caption("AI Agent for Literature Review, Study Comparison, and Research Gap Detection")
+st.title("NewsMate Agent")
+st.caption("AI Agent for News Sentiment Analysis and Question Answering")
 
-uploaded_files = st.file_uploader(
-    "Upload research papers (PDF)",
-    type=["pdf"],
-    accept_multiple_files=True
-)
+process_btn = st.button("Fetch Latest News")
 
-process_btn = st.button("Process Papers")
 
 if process_btn:
-    if not research_topic.strip():
-        st.error("Please enter a research topic.")
-    elif not uploaded_files:
-        st.error("Please upload at least one PDF file.")
+
+    if not topic.strip():
+        st.error("Please enter a topic.")
+
     else:
-        analyses = []
-        all_indexed_chunks = []
 
-        progress = st.progress(0)
-        status = st.empty()
-        total_files = len(uploaded_files)
+        with st.spinner("Fetching news articles..."):
 
-        for idx, uploaded_file in enumerate(uploaded_files, start=1):
-            status.write(f"Processing: {uploaded_file.name}")
+            news_df = fetch_latest_news(topic)
 
-            full_text, pages = extract_text_from_pdf(uploaded_file)
+        if news_df.empty:
+            st.error("No news articles found.")
 
-            if not full_text.strip():
-                st.warning(f"No readable text found in {uploaded_file.name}. Skipping.")
-                continue
+        else:
 
-            analysis = analyze_single_paper(
-                full_text=full_text,
-                paper_name=uploaded_file.name,
-                research_topic=research_topic,
-                keywords=keywords
-            )
-            analyses.append(analysis)
+            st.session_state.news_df = news_df
 
-            chunks = chunk_pages(pages, chunk_size=1200, overlap=200)
+            with st.spinner("Analyzing sentiment..."):
+
+                sentiment_df = analyze_news_sentiment(news_df)
+
+            st.session_state.sentiment_df = sentiment_df
+
+            articles = []
+
+            for idx, row in news_df.iterrows():
+
+                articles.append({
+                    "page_number": idx,
+                    "text": row["title"] + ". " + row["body"]
+                })
+
+            chunks = chunk_pages(articles, chunk_size=1200, overlap=200)
+
             indexed_chunks = build_chunk_index(chunks)
 
             for chunk in indexed_chunks:
-                chunk["paper_name"] = uploaded_file.name
+                chunk["source"] = "news"
 
-            all_indexed_chunks.extend(indexed_chunks)
-            progress.progress(idx / total_files)
-
-        if analyses:
-            comparison_df = make_comparison_dataframe(analyses)
-
-            st.session_state.analyses = analyses
-            st.session_state.comparison_df = comparison_df
-            st.session_state.indexed_chunks = all_indexed_chunks
+            st.session_state.indexed_chunks = indexed_chunks
             st.session_state.processed = True
 
-            st.success("Papers processed successfully.")
-        else:
-            st.error("No papers were processed successfully.")
+            st.success("News processed successfully.")
 
-        status.empty()
 
 if st.session_state.processed:
+
     st.markdown("---")
 
-    tab1, tab2, tab3, tab4, tab5 = st.tabs([
-        "Study Analysis",
-        "Comparison Table",
-        "Literature Review",
-        "Research Gaps",
+    tab1, tab2, tab3 = st.tabs([
+        "News Articles",
+        "Sentiment Analysis",
         "Q&A"
     ])
 
     with tab1:
-        st.subheader("Analyzed Papers")
-        for idx, analysis in enumerate(st.session_state.analyses, start=1):
-            with st.expander(f"Paper {idx}: {analysis.get('paper_name', 'Unknown')}"):
-                st.json(analysis)
 
-    with tab2:
-        st.subheader("Comparison Table")
-        st.dataframe(st.session_state.comparison_df, use_container_width=True)
+        st.subheader("Collected News Articles")
 
-        csv_data = st.session_state.comparison_df.to_csv(index=False).encode("utf-8")
-        st.download_button(
-            "Download Comparison Table as CSV",
-            data=csv_data,
-            file_name="comparison_table.csv",
-            mime="text/csv"
+        st.dataframe(
+            st.session_state.news_df,
+            use_container_width=True
         )
 
+
+    with tab2:
+
+        st.subheader("Sentiment Comparison")
+
+        st.dataframe(
+            st.session_state.sentiment_df,
+            use_container_width=True
+        )
+
+
     with tab3:
-        st.subheader("Literature Review Draft")
 
-        if st.button("Generate Literature Review Draft"):
-            with st.spinner("Generating literature review..."):
-                review_text = generate_literature_review(
-                    analyses=st.session_state.analyses,
-                    research_topic=research_topic,
-                    review_style=review_style
-                )
-                st.session_state.literature_review_text = review_text
+        st.subheader("Ask Questions About the News")
 
-        if st.session_state.literature_review_text:
-            st.text_area(
-                "Generated Literature Review",
-                value=st.session_state.literature_review_text,
-                height=400
-            )
-
-    with tab4:
-        st.subheader("Research Gaps and Future Directions")
-
-        if st.button("Detect Research Gaps"):
-            with st.spinner("Analyzing research gaps..."):
-                gaps_text = generate_research_gaps(
-                    analyses=st.session_state.analyses,
-                    research_topic=research_topic
-                )
-                st.session_state.research_gaps_text = gaps_text
-
-        if st.session_state.research_gaps_text:
-            st.text_area(
-                "Research Gap Analysis",
-                value=st.session_state.research_gaps_text,
-                height=350
-            )
-
-    with tab5:
-        st.subheader("Ask Questions About the Uploaded Papers")
         user_question = st.text_input(
             "Enter your question",
-            placeholder="Example: What methodologies were most commonly used across the uploaded studies?"
+            placeholder="Example: What are the main concerns about AI?"
         )
 
         if st.button("Answer Question"):
+
             if not user_question.strip():
                 st.warning("Please enter a question.")
+
             else:
-                with st.spinner("Searching papers and generating answer..."):
+
+                with st.spinner("Searching articles and generating answer..."):
+
                     answer, sources = answer_question_with_sources(
                         question=user_question,
                         indexed_chunks=st.session_state.indexed_chunks,
-                        analyses=st.session_state.analyses,
+                        analyses=[],
                         top_k=top_k_chunks
                     )
 
@@ -220,10 +161,13 @@ if st.session_state.processed:
                 st.write(answer)
 
                 st.markdown("### Retrieved Source Chunks")
+
                 for source in sources:
+
                     with st.expander(
-                        f"{source.get('paper_name', 'Unknown')} | Page {source.get('page_number', 'N/A')} | Score {source.get('score', 0):.4f}"
+                        f"Chunk {source.get('chunk_id')} | Score {source.get('score',0):.4f}"
                     ):
                         st.write(source["text"])
+
 else:
-    st.info("Upload PDFs, fill in the research setup, and click 'Process Papers'.")
+    st.info("Enter a topic and click 'Fetch Latest News'.")

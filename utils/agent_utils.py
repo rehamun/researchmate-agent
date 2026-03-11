@@ -170,3 +170,44 @@ Write the answer in formal English.
 
     answer = call_llm_text(system_prompt, user_prompt, temperature=0.2)
     return answer, top_chunks
+
+def analyze_news_sentiment(df):
+
+    rows = []
+
+    system_prompt = """
+You are a sentiment analysis system.
+
+Classify the news article sentiment as:
+Positive
+Negative
+Neutral
+
+Return JSON:
+{
+ "sentiment": "",
+ "reason": ""
+}
+"""
+
+    for _, row in df.iterrows():
+
+        user_prompt = f"""
+Title:
+{row['title']}
+
+Body:
+{row['body']}
+"""
+
+        result = call_llm_json(system_prompt, user_prompt)
+
+        rows.append({
+            "title": row["title"],
+            "source": row["source"],
+            "date": row["date"],
+            "sentiment": result.get("sentiment"),
+            "reason": result.get("reason")
+        })
+
+    return pd.DataFrame(rows)
