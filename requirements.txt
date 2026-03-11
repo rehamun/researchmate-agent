@@ -6,3 +6,4 @@ numpy
 newspaper3k
 newsapi-python
 textblob
+requests

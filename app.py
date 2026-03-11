@@ -1,7 +1,7 @@
 import os
 import streamlit as st
 import pandas as pd
-
+from utils.n8n_utils import send_to_n8n
 from utils.news_utils import fetch_latest_news
 from utils.pdf_utils import chunk_pages
 from utils.rag_utils import build_chunk_index
@@ -120,6 +120,30 @@ if st.session_state.processed:
             st.session_state.news_df,
             use_container_width=True
         )
+
+        if st.button("Publish to n8n"):
+
+            if st.session_state.news_df.empty:
+                st.warning("No news data available.")
+            else:
+
+                webhook_url = os.getenv("N8N_WEBHOOK_URL")
+
+                if not webhook_url:
+                    st.error("N8N_WEBHOOK_URL is not configured.")
+                else:
+
+                    payload = {
+                        "topic": topic,
+                        "articles": st.session_state.news_df.to_dict(orient="records")
+                    }
+
+                    result = send_to_n8n(payload, webhook_url)
+
+                    if result["status_code"] == 200:
+                        st.success("Data successfully sent to n8n.")
+                    else:
+                        st.error(f"Failed to send data: {result['response_text']}")
 
 
     with tab2:
