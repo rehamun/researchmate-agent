@@ -107,9 +107,10 @@ if st.session_state.processed:
 
     st.markdown("---")
 
-    tab1, tab2, tab3 = st.tabs([
+    tab1, tab2, tab3, tab4 = st.tabs([
         "News Articles",
         "Sentiment Analysis",
+        "Analytics",
         "Q&A"
     ])
 
@@ -146,7 +147,6 @@ if st.session_state.processed:
                     else:
                         st.error(f"Failed to send data: {result['response_text']}")
 
-
     with tab2:
 
         st.subheader("Sentiment Comparison")
@@ -155,12 +155,16 @@ if st.session_state.processed:
             st.session_state.sentiment_df,
             use_container_width=True
         )
-        st.markdown("### News Analytics Dashboard")
+
+    with tab4:
+
+        st.subheader("News Analytics Dashboard")
 
         col1, col2 = st.columns(2)
 
-        # Sentiment Distribution Chart
-
+        # ---------------------------
+        # Sentiment Visualization
+        # ---------------------------
         with col1:
             st.subheader("Sentiment Distribution")
 
@@ -187,8 +191,9 @@ if st.session_state.processed:
 
             st.plotly_chart(fig_sentiment, use_container_width=True)
 
-        # News Timeline Chart
-
+        # ---------------------------
+        # News Timeline
+        # ---------------------------
         with col2:
             st.subheader("News Timeline")
 
@@ -213,7 +218,6 @@ if st.session_state.processed:
             fig_timeline.update_traces(line_color="blue")
 
             st.plotly_chart(fig_timeline, use_container_width=True)
-
 
     with tab3:
 
