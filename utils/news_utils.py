@@ -1,7 +1,8 @@
 import requests
 import pandas as pd
+import os
 
-NEWS_API_KEY = "YOUR_NEWSAPI_KEY"
+NEWS_API_KEY = os.getenv("NEWS_API_KEY")
 
 
 def fetch_latest_news(topic, max_articles=10):
