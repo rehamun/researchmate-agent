@@ -1,6 +1,7 @@
 import os
 import streamlit as st
 import pandas as pd
+import plotly.express as px
 from utils.n8n_utils import send_to_n8n
 from utils.news_utils import fetch_latest_news
 from utils.pdf_utils import chunk_pages
@@ -154,6 +155,64 @@ if st.session_state.processed:
             st.session_state.sentiment_df,
             use_container_width=True
         )
+        st.markdown("### News Analytics Dashboard")
+
+        col1, col2 = st.columns(2)
+
+        # Sentiment Distribution Chart
+
+        with col1:
+            st.subheader("Sentiment Distribution")
+
+            sentiment_counts = (
+                st.session_state.sentiment_df["sentiment"]
+                .value_counts()
+                .reset_index()
+            )
+
+            sentiment_counts.columns = ["sentiment", "count"]
+
+            fig_sentiment = px.bar(
+                sentiment_counts,
+                x="sentiment",
+                y="count",
+                color="sentiment",
+                color_discrete_map={
+                    "Positive": "green",
+                    "Neutral": "gray",
+                    "Negative": "red"
+                },
+                title="News Sentiment Distribution"
+            )
+
+            st.plotly_chart(fig_sentiment, use_container_width=True)
+
+        # News Timeline Chart
+
+        with col2:
+            st.subheader("News Timeline")
+
+            news_df = st.session_state.news_df.copy()
+
+            news_df["date"] = pd.to_datetime(news_df["date"], errors="coerce")
+
+            timeline = (
+                news_df.groupby(news_df["date"].dt.date)
+                .size()
+                .reset_index(name="articles")
+            )
+
+            fig_timeline = px.line(
+                timeline,
+                x="date",
+                y="articles",
+                markers=True,
+                title="Articles Published Over Time"
+            )
+
+            fig_timeline.update_traces(line_color="blue")
+
+            st.plotly_chart(fig_timeline, use_container_width=True)
 
 
     with tab3:

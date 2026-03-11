@@ -7,3 +7,4 @@ newspaper3k
 newsapi-python
 textblob
 requests
+plotly
