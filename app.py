@@ -2,6 +2,7 @@ import os
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+
 from utils.n8n_utils import send_to_n8n
 from utils.news_utils import fetch_latest_news
 from utils.pdf_utils import chunk_pages
@@ -13,17 +14,29 @@ from utils.agent_utils import (
 
 st.set_page_config(page_title="NewsMate Agent", layout="wide")
 
+
+# Load secrets
+
 try:
     if "OPENAI_API_KEY" in st.secrets:
         os.environ["OPENAI_API_KEY"] = st.secrets["OPENAI_API_KEY"]
+
     if "OPENAI_MODEL" in st.secrets:
         os.environ["OPENAI_MODEL"] = st.secrets["OPENAI_MODEL"]
+
     if "EMBEDDING_MODEL" in st.secrets:
         os.environ["EMBEDDING_MODEL"] = st.secrets["EMBEDDING_MODEL"]
+
+    if "N8N_WEBHOOK_URL" in st.secrets:
+        os.environ["N8N_WEBHOOK_URL"] = st.secrets["N8N_WEBHOOK_URL"]
+
 except Exception:
     pass
 
 
+# -----------------------------
+# Session state
+# -----------------------------
 if "news_df" not in st.session_state:
     st.session_state.news_df = pd.DataFrame()
 
@@ -36,6 +49,8 @@ if "indexed_chunks" not in st.session_state:
 if "processed" not in st.session_state:
     st.session_state.processed = False
 
+
+# Sidebar
 
 st.sidebar.title("News Topic Setup")
 
@@ -51,11 +66,15 @@ top_k_chunks = st.sidebar.slider(
     value=6
 )
 
+
+# Main Title
+
 st.title("NewsMate Agent")
 st.caption("AI Agent for News Sentiment Analysis and Question Answering")
 
 process_btn = st.button("Fetch Latest News")
 
+# Fetch News
 
 if process_btn:
 
@@ -65,7 +84,6 @@ if process_btn:
     else:
 
         with st.spinner("Fetching news articles..."):
-
             news_df = fetch_latest_news(topic)
 
         if news_df.empty:
@@ -76,7 +94,6 @@ if process_btn:
             st.session_state.news_df = news_df
 
             with st.spinner("Analyzing sentiment..."):
-
                 sentiment_df = analyze_news_sentiment(news_df)
 
             st.session_state.sentiment_df = sentiment_df
@@ -84,10 +101,9 @@ if process_btn:
             articles = []
 
             for idx, row in news_df.iterrows():
-
                 articles.append({
                     "page_number": idx,
-                    "text": row["title"] + ". " + row["body"]
+                    "text": f"{row['title']}. {row['body']}"
                 })
 
             chunks = chunk_pages(articles, chunk_size=1200, overlap=200)
@@ -103,6 +119,9 @@ if process_btn:
             st.success("News processed successfully.")
 
 
+# -----------------------------
+# Tabs
+# -----------------------------
 if st.session_state.processed:
 
     st.markdown("---")
@@ -113,6 +132,9 @@ if st.session_state.processed:
         "Analytics",
         "Q&A"
     ])
+
+
+    # TAB 1 — NEWS ARTICLES
 
     with tab1:
 
@@ -127,12 +149,14 @@ if st.session_state.processed:
 
             if st.session_state.news_df.empty:
                 st.warning("No news data available.")
+
             else:
 
                 webhook_url = os.getenv("N8N_WEBHOOK_URL")
 
                 if not webhook_url:
                     st.error("N8N_WEBHOOK_URL is not configured.")
+
                 else:
 
                     payload = {
@@ -145,28 +169,32 @@ if st.session_state.processed:
                     if result["status_code"] == 200:
                         st.success("Data successfully sent to n8n.")
                     else:
-                        st.error(f"Failed to send data: {result['response_text']}")
+                        st.error(result["response_text"])
+
+
+    # TAB 2 — SENTIMENT TABLE
 
     with tab2:
 
-        st.subheader("Sentiment Comparison")
+        st.subheader("Sentiment Analysis Results")
 
-        st.dataframe(
-            st.session_state.sentiment_df,
-            use_container_width=True
-        )
+        if st.session_state.sentiment_df.empty:
+            st.info("No sentiment analysis available.")
+        else:
+            st.dataframe(
+                st.session_state.sentiment_df,
+                use_container_width=True
+            )
 
-    with tab4:
+    # TAB 3 — ANALYTICS DASHBOARD
+    with tab3:
 
         st.subheader("News Analytics Dashboard")
 
         col1, col2 = st.columns(2)
 
-        # ---------------------------
-        # Sentiment Visualization
-        # ---------------------------
+        # Sentiment Chart
         with col1:
-            st.subheader("Sentiment Distribution")
 
             sentiment_counts = (
                 st.session_state.sentiment_df["sentiment"]
@@ -191,11 +219,8 @@ if st.session_state.processed:
 
             st.plotly_chart(fig_sentiment, use_container_width=True)
 
-        # ---------------------------
-        # News Timeline
-        # ---------------------------
+        # Timeline Chart
         with col2:
-            st.subheader("News Timeline")
 
             news_df = st.session_state.news_df.copy()
 
@@ -219,7 +244,9 @@ if st.session_state.processed:
 
             st.plotly_chart(fig_timeline, use_container_width=True)
 
-    with tab3:
+    # TAB 4 — RAG Q&A
+
+    with tab4:
 
         st.subheader("Ask Questions About the News")
 
